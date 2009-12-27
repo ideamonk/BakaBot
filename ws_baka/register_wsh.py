@@ -32,4 +32,5 @@ def web_socket_transfer_data(request):
         r.set ('nickcount', uid)
         r.set (remote_ip, uid)
 
+    r.save()
     msgutil.send_message(request, str(uid))

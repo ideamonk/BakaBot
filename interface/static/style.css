@@ -1,0 +1,123 @@
+/*  Abhishek Mishra                                     ideamonk at gmail.com */
+
+/* Base */
+* { margin:0px; padding:0px; text-decoration:none; }
+
+body {
+    background-color: #dbe1ed;
+    font: 12px "Lucida Grande", Lucida, Verdana, sans-serif;
+}
+
+/* My Sweet CSS3 Bubbles */
+.bubble {
+/*     overflow:hidden; */
+    text-align:left;
+    padding-bottom:10px;
+}
+div.rounded {
+    background-color: #f4f4f4;
+    background: -webkit-gradient(linear, left top, left bottom, from(#ffffff), to(#ffffff), color-stop(0.2, #f4f4f4), color-stop(0.3, #eee), color-stop(0.7, #eee));
+    color:#333;
+    border-radius:10px;
+    -moz-border-radius:10px;
+    padding:10px;
+    margin:5px 5px -5px 5px;
+    font-size:1.0em;
+    -webkit-box-shadow: 1px 1px 5px #aaa;
+    -moz-box-shadow: 1px 1px 5px #aaa;
+    overflow:hidden;
+}
+#rounded_orange {
+    color:#9f3400;
+    background: -webkit-gradient(linear, left top, left bottom, from(#ffffff), to(#ffffff), color-stop(0.2, #f6f9e6), color-stop(0.3, #f9f5e2), color-stop(0.7, #f9f5e2));
+    -webkit-box-shadow: 1px 1px 5px #dfd4a7;
+    -moz-box-shadow: 1px 1px 5px #dfd4a7;
+}
+#rounded_red {
+    color:#843c46;
+    background-color:#f7e4e6;
+    background: -webkit-gradient(linear, left top, left bottom, from(#ffffff), to(#ffffff), color-stop(0.2, #faeced), color-stop(0.3, #f7e4e6), color-stop(0.7, #f7e4e6));
+    -webkit-box-shadow: 1px 1px 5px #e6becf;
+    -moz-box-shadow: 1px 1px 5px #e6becf;
+}
+#rounded_green {
+    background: -webkit-gradient(linear, left top, left bottom, from(#ffffff), to(#ffffff), color-stop(0.2, #ecffee), color-stop(0.3, #ecffee), color-stop(0.7, #ecffee));
+    color:#00800c;
+}
+cite.rounded {
+    padding:10px 10px;
+    background: url(file:///disk/code/BakaBot/interface/images/tip.gif) top 20px no-repeat;
+    color:#555;
+    text-shadow: 1px 1px 1px #fff;
+}
+
+/* Layout */
+.wrapper {
+    width:400px;
+    margin: 0px auto;
+}
+.header {
+    background:#ffffff;
+    padding:5px 5px;
+    -webkit-box-shadow:0px 2px 5px #aaa;
+    -moz-box-shadow:0px 2px 5px #aaa;
+    margin-bottom:20px;
+}
+.header h2{ padding:10px;}
+#chatbox {
+    width:400px;
+    text-align:center;
+    max-height:450px;
+    overflow:auto;
+    padding-right:5px;
+}
+
+#panel {
+    text-align:center;
+    margin-top:10px;
+    padding-top:10px;
+    border-top:1px solid #aaa;
+}
+#userinput{
+    width:250px;
+    background: #b3e4f9;
+    color: #0d80e1;
+    padding:10px;
+    font-size:1.4em;
+    border-radius:5px;
+    border:3px #fff solid;
+    -webkit-box-shadow:1px 1px 5px #aaa;
+    font-weight:bold;
+    margin-right:10px;
+}
+#btnsend {
+    padding:10px;
+    font-size:1.4em;
+    border-radius:5px;
+    border:3px #fff solid;
+    -webkit-box-shadow:1px 1px 5px #aaa;
+    background: -webkit-gradient(linear, left top, left bottom, from(#ffffff), to(#ffffff), color-stop(0.2, #f4f4f4), color-stop(0.3, #eee), color-stop(0.7, #eee));
+    color:#333;
+}
+#btnsend:hover {
+    background: -webkit-gradient(linear, left top, left bottom, from(#ddd), to(#ddd), color-stop(0.2, #ffffff), color-stop(0.3, #f4f4f4), color-stop(0.7, #f4f4f4));
+    color:#333;
+}
+
+.footer {
+    margin-top:20px;
+    padding-top:10px;
+    border-top:1px solid #aaa;
+    font-size:1em;
+}
+.footer p {
+    background: -webkit-gradient(linear, left top, left bottom, from(#dbe1ed), to(#ffffff));
+    padding:10px;
+    line-height:1.5em;
+}
+.footer p span{
+    background: #ffff99;
+    padding: 0px 10px;
+    margin: 2px 0px;
+    display:inline-block;
+}

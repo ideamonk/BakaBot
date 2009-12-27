@@ -56,4 +56,6 @@ while True:
                             'baka',
                             ' @%s %s' % (nick, k.respond(msg.split('@baka',1)[1]))
                             )
+        #time.sleep(1)       # lets be a little human
         r.push ('msgs',response,head=True)
+        r.save()

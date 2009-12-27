@@ -13,7 +13,8 @@ import redis
 import time
 import logging
 
-_GOODBYE_MESSAGE = '___ImDoneWithIt___'
+timeout = 600
+__KillerWords__ = '__ImDoneWithIt__'
 
 def web_socket_do_extra_handshake(request):
     pass  # Always accept.
@@ -21,19 +22,32 @@ def web_socket_do_extra_handshake(request):
 def web_socket_transfer_data(request):
     lastmsg = ''
     r = redis.Redis()
+    timelim = time.time() + timeout
+    
     while True:
+        #words = msgutil.receive_message(request)
+        #if words == __KillerWords__:
+        #    break
+            
         # get last 10 messages
         messages = r.lrange('msgs',0,9)
         try:
             # give remaining messages from buffer
             lastindex = messages.index(lastmsg)
-            logging.info (lastindex)
-            for i in xrange(0,lastindex):
-                msgutil.send_message(request,
+            if (lastindex>0):
+                timelim = time.time() + timeout
+                for i in xrange(0,lastindex):
+                    msgutil.send_message(request,
                                     messages[lastindex - i -1].split('|',1)[1])
         except ValueError:
             # client has not received anything at all, give the whole buffer
             for msg in messages[::-1]:
                 msgutil.send_message(request, msg.split('|',1)[1])
-
+            timelim = time.time() + timeout
+            
         lastmsg = messages[0]
+
+        if (time.time() > timelim):
+            print "A receive timedout"
+            r.disconnect()
+            break
