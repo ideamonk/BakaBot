@@ -1,0 +1,9 @@
+http://www.urbandictionary.com/define.php?term=bokka
+
+
+DB -
+    msgs <- list of strings... never flushed... no worries about space
+    
+    format -
+        '%s|nickname:message' % time.time()
+        if message has @ideabot
