@@ -83,8 +83,21 @@
                         var room_msg = evt.data;
                         //alert (room_msg);
                         show (room_msg);
-                    }
-                }
+                    };
+
+					recvsock.onclose = function(e){
+						$(genPopup("Woops, receive handler closed, can't scoop more :/","error")).hide().appendTo("#chatbox").show(300);
+					};
+					
+					sendsock.onclose = function(e){
+						$(genPopup("Woops, send handler closed, can't scoop more :/","error")).hide().appendTo("#chatbox").show(300);
+					};
+                };
+				
+				regsock.onclose = function(e){
+					$(genPopup("Woops, register handler couldn't be connected :/","error")).hide().appendTo("#chatbox").show(300);
+				};
+				
             } else {
                 $(genPopup("Your browser currently does not support WebSockets, please try in a latest build of Chrome...","error")).hide().appendTo("#chatbox").show(300);
             }
