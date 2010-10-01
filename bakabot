@@ -1,0 +1,49 @@
+#! /bin/sh
+
+### BEGIN INIT INFO
+# Proviides:         bakabot
+# Required-Start:    $all
+# Required-Stop:     $all
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: starts bakabot
+# Description:       starts bakabot using start-stop-daemon
+### END INIT INFO
+
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+DAEMON = /path/to/BakaBot/start_serving
+NAME=bakabot
+DESC=bakabot
+
+test -x $DAEMON || exit 0
+
+set -e
+
+case "$1" in
+  start)
+        echo -n "Starting $DESC: "
+         /path/to/BakaBot/start_serving
+	echo "$NAME."
+        ;;
+  stop)
+        echo -n "Stopping $DESC: "
+        killall redis-server
+	killall python
+	echo "$NAME."
+        ;;
+  restart|force-reload)
+        echo -n "Restarting $DESC: "
+        echo "$NAME."
+        ;;
+  reload)
+      echo -n "Reloading $DESC configuration: "
+      echo "$NAME."
+      ;;
+  *)
+        N=/etc/init.d/$NAME
+        echo "Usage: $N {start|stop|restart|force-reload}" >&2
+        exit 1
+        ;;
+esac
+
+exit 0
