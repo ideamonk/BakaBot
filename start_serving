@@ -1,0 +1,8 @@
+#!/bin/bash
+
+redis-server &
+cd bot
+./bakabot.py &
+cd ..
+cd mod_pywebsocket
+./standalone.py -p 4040 -d ../ws_baka/

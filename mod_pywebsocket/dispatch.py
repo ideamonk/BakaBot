@@ -35,7 +35,8 @@
 import os
 import re
 
-import util
+from mod_pywebsocket import msgutil
+from mod_pywebsocket import util
 
 
 _SOURCE_PATH_PATTERN = re.compile(r'(?i)_wsh\.py$')
@@ -142,6 +143,23 @@ class Dispatcher(object):
                                 'root_dir:%s.' % (scan_dir, root_dir))
         self._source_files_in_dir(root_dir, scan_dir)
 
+    def add_resource_path_alias(self,
+                                alias_resource_path, existing_resource_path):
+        """Add resource path alias.
+
+        Once added, request to alias_resource_path would be handled by
+        handler registered for existing_resource_path.
+
+        Args:
+            alias_resource_path: alias resource path
+            existing_resource_path: existing resource path
+        """
+        try:
+            handler = self._handlers[existing_resource_path]
+            self._handlers[alias_resource_path] = handler
+        except KeyError:
+            raise DispatchError('No handler for: %r' % existing_resource_path)
+
     def source_warnings(self):
         """Return warnings in sourcing handlers."""
 
@@ -180,13 +198,26 @@ class Dispatcher(object):
 
         unused_do_extra_handshake, transfer_data_ = self._handler(request)
         try:
-            transfer_data_(request)
-        except Exception, e:
-            util.prepend_message_to_exception(
-                    '%s raised exception for %s: ' % (
-                            _TRANSFER_DATA_HANDLER_NAME, request.ws_resource),
+            try:
+                request.client_terminated = False
+                request.server_terminated = False
+                transfer_data_(request)
+            except msgutil.ConnectionTerminatedException, e:
+                util.prepend_message_to_exception(
+                    'client initiated closing handshake for %s: ' % (
+                    request.ws_resource),
                     e)
-            raise
+                raise
+            except Exception, e:
+                print 'exception: %s' % type(e)
+                util.prepend_message_to_exception(
+                    '%s raised exception for %s: ' % (
+                    _TRANSFER_DATA_HANDLER_NAME, request.ws_resource),
+                    e)
+                raise
+        finally:
+            msgutil.close_connection(request)
+
 
     def _handler(self, request):
         try:

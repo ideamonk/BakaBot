@@ -38,6 +38,7 @@ Usage:
     python standalone.py [-p <ws_port>] [-w <websock_handlers>]
                          [-s <scan_dir>]
                          [-d <document_root>]
+                         [-m <websock_handlers_map_file>]
                          ... for other options, see _main below ...
 
 <ws_port> is the port number to use for ws:// connection.
@@ -54,15 +55,21 @@ under scan_dir are scanned. This is useful in saving scan time.
 Note:
 This server is derived from SocketServer.ThreadingMixIn. Hence a thread is
 used for each request.
+
+SECURITY WARNING: This uses CGIHTTPServer and CGIHTTPServer is not secure.
+It may execute arbitrary Python code or external programs. It should not be
+used outside a firewall.
 """
 
 import BaseHTTPServer
+import CGIHTTPServer
 import SimpleHTTPServer
 import SocketServer
 import logging
 import logging.handlers
 import optparse
 import os
+import re
 import socket
 import sys
 
@@ -73,10 +80,10 @@ try:
 except ImportError:
     pass
 
-import dispatch
-import handshake
-import memorizingfile
-import util
+from mod_pywebsocket import dispatch
+from mod_pywebsocket import handshake
+from mod_pywebsocket import memorizingfile
+from mod_pywebsocket import util
 
 
 _LOG_LEVELS = {
@@ -88,6 +95,8 @@ _LOG_LEVELS = {
 
 _DEFAULT_LOG_MAX_BYTES = 1024 * 256
 _DEFAULT_LOG_BACKUP_COUNT = 5
+
+_DEFAULT_REQUEST_QUEUE_SIZE = 128
 
 # 1024 is practically large enough to contain WebSocket handshake lines.
 _MAX_MEMORIZED_LINES = 1024
@@ -155,6 +164,11 @@ class _StandaloneRequest(object):
         return self._request_handler.path
     uri = property(get_uri)
 
+    def get_method(self):
+        """Getter to mimic request.method."""
+        return self._request_handler.command
+    method = property(get_method)
+
     def get_headers_in(self):
         """Getter to mimic request.headers_in."""
         return self._request_handler.headers
@@ -169,6 +183,7 @@ class WebSocketServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
     """HTTPServer specialized for Web Socket."""
 
     SocketServer.ThreadingMixIn.daemon_threads = True
+    SocketServer.TCPServer.allow_reuse_address = True
 
     def __init__(self, server_address, RequestHandlerClass):
         """Override SocketServer.BaseServer.__init__."""
@@ -198,8 +213,8 @@ class WebSocketServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
         # trailing comma.
 
 
-class WebSocketRequestHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
-    """SimpleHTTPRequestHandler specialized for Web Socket."""
+class WebSocketRequestHandler(CGIHTTPServer.CGIHTTPRequestHandler):
+    """CGIHTTPRequestHandler specialized for Web Socket."""
 
     def setup(self):
         """Override SocketServer.StreamRequestHandler.setup."""
@@ -217,8 +232,9 @@ class WebSocketRequestHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
         self._print_warnings_if_any()
         self._handshaker = handshake.Handshaker(
                 self._request, self._dispatcher,
-                WebSocketRequestHandler.options.strict)
-        SimpleHTTPServer.SimpleHTTPRequestHandler.__init__(
+                allowDraft75=WebSocketRequestHandler.options.allow_draft75,
+                strict=WebSocketRequestHandler.options.strict)
+        CGIHTTPServer.CGIHTTPRequestHandler.__init__(
                 self, *args, **keywords)
 
     def _print_warnings_if_any(self):
@@ -232,11 +248,17 @@ class WebSocketRequestHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 
         Return True to continue processing for HTTP(S), False otherwise.
         """
-        result = SimpleHTTPServer.SimpleHTTPRequestHandler.parse_request(self)
+        result = CGIHTTPServer.CGIHTTPRequestHandler.parse_request(self)
         if result:
             try:
                 self._handshaker.do_handshake()
-                self._dispatcher.transfer_data(self._request)
+                try:
+                    self._dispatcher.transfer_data(self._request)
+                except Exception, e:
+                    # Catch exception in transfer_data.
+                    # In this case, handshake has been successful, so just log
+                    # the exception and return False.
+                    logging.info('mod_pywebsocket: %s' % e)
                 return False
             except handshake.HandshakeError, e:
                 # Handshake for ws(s) failed. Assume http(s).
@@ -264,6 +286,28 @@ class WebSocketRequestHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
         # For example, HTTP status code is logged by this method.
         logging.warn('%s - %s' % (self.address_string(), (args[0] % args[1:])))
 
+    def is_cgi(self):
+        """Test whether self.path corresponds to a CGI script.
+
+        Add extra check that self.path doesn't contains ..
+        Also check if the file is a executable file or not.
+        If the file is not executable, it is handled as static file or dir
+        rather than a CGI script.
+        """
+        if CGIHTTPServer.CGIHTTPRequestHandler.is_cgi(self):
+            if '..' in self.path:
+                return False
+            # strip query parameter from request path
+            resource_name = self.path.split('?', 2)[0]
+            # convert resource_name into real path name in filesystem.
+            scriptfile = self.translate_path(resource_name)
+            if not os.path.isfile(scriptfile):
+                return False
+            if not self.is_executable(scriptfile):
+                return False
+            return True
+        return False
+
 
 def _configure_logging(options):
     logger = logging.getLogger()
@@ -278,47 +322,116 @@ def _configure_logging(options):
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
+def _alias_handlers(dispatcher, websock_handlers_map_file):
+    """Set aliases specified in websock_handler_map_file in dispatcher.
+
+    Args:
+        dispatcher: dispatch.Dispatcher instance
+        websock_handler_map_file: alias map file
+    """
+    fp = open(websock_handlers_map_file)
+    try:
+        for line in fp:
+            if line[0] == '#' or line.isspace():
+                continue
+            m = re.match('(\S+)\s+(\S+)', line)
+            if not m:
+                logging.warning('Wrong format in map file:' + line)
+                continue
+            try:
+                dispatcher.add_resource_path_alias(
+                    m.group(1), m.group(2))
+            except dispatch.DispatchError, e:
+                logging.error(str(e))
+    finally:
+        fp.close()
+
+
 
 def _main():
     parser = optparse.OptionParser()
+    parser.add_option('-H', '--server-host', '--server_host',
+                      dest='server_host',
+                      default='',
+                      help='server hostname to listen to')
     parser.add_option('-p', '--port', dest='port', type='int',
-                      default=handshake._DEFAULT_WEB_SOCKET_PORT,
+                      default=handshake.DEFAULT_WEB_SOCKET_PORT,
                       help='port to listen to')
-    parser.add_option('-w', '--websock_handlers', dest='websock_handlers',
+    parser.add_option('-w', '--websock-handlers', '--websock_handlers',
+                      dest='websock_handlers',
                       default='.',
                       help='Web Socket handlers root directory.')
-    parser.add_option('-s', '--scan_dir', dest='scan_dir',
+    parser.add_option('-m', '--websock-handlers-map-file',
+                      '--websock_handlers_map_file',
+                      dest='websock_handlers_map_file',
+                      default=None,
+                      help=('Web Socket handlers map file. '
+                            'Each line consists of alias_resource_path and '
+                            'existing_resource_path, separated by spaces.'))
+    parser.add_option('-s', '--scan-dir', '--scan_dir', dest='scan_dir',
                       default=None,
                       help=('Web Socket handlers scan directory. '
                             'Must be a directory under websock_handlers.'))
-    parser.add_option('-d', '--document_root', dest='document_root',
-                      default='.',
+    parser.add_option('-d', '--document-root', '--document_root',
+                      dest='document_root', default='.',
                       help='Document root directory.')
+    parser.add_option('-x', '--cgi-paths', '--cgi_paths', dest='cgi_paths',
+                      default=None,
+                      help=('CGI paths relative to document_root.'
+                            'Comma-separated. (e.g -x /cgi,/htbin) '
+                            'Files under document_root/cgi_path are handled '
+                            'as CGI programs. Must be executable.'))
     parser.add_option('-t', '--tls', dest='use_tls', action='store_true',
                       default=False, help='use TLS (wss://)')
-    parser.add_option('-k', '--private_key', dest='private_key',
+    parser.add_option('-k', '--private-key', '--private_key',
+                      dest='private_key',
                       default='', help='TLS private key file.')
     parser.add_option('-c', '--certificate', dest='certificate',
                       default='', help='TLS certificate file.')
-    parser.add_option('-l', '--log_file', dest='log_file',
+    parser.add_option('-l', '--log-file', '--log_file', dest='log_file',
                       default='', help='Log file.')
-    parser.add_option('--log_level', type='choice', dest='log_level',
-                      default='warn',
+    parser.add_option('--log-level', '--log_level', type='choice',
+                      dest='log_level', default='warn',
                       choices=['debug', 'info', 'warn', 'error', 'critical'],
                       help='Log level.')
-    parser.add_option('--log_max', dest='log_max', type='int',
+    parser.add_option('--log-max', '--log_max', dest='log_max', type='int',
                       default=_DEFAULT_LOG_MAX_BYTES,
                       help='Log maximum bytes')
-    parser.add_option('--log_count', dest='log_count', type='int',
-                      default=_DEFAULT_LOG_BACKUP_COUNT,
+    parser.add_option('--log-count', '--log_count', dest='log_count',
+                      type='int', default=_DEFAULT_LOG_BACKUP_COUNT,
                       help='Log backup count')
+    parser.add_option('--allow-draft75', dest='allow_draft75',
+                      action='store_true', default=False,
+                      help='Allow draft 75 handshake')
     parser.add_option('--strict', dest='strict', action='store_true',
                       default=False, help='Strictly check handshake request')
+    parser.add_option('-q', '--queue', dest='request_queue_size', type='int',
+                      default=_DEFAULT_REQUEST_QUEUE_SIZE,
+                      help='request queue size')
     options = parser.parse_args()[0]
 
     os.chdir(options.document_root)
 
     _configure_logging(options)
+
+    SocketServer.TCPServer.request_queue_size = options.request_queue_size
+    CGIHTTPServer.CGIHTTPRequestHandler.cgi_directories = []
+
+    if options.cgi_paths:
+        CGIHTTPServer.CGIHTTPRequestHandler.cgi_directories = \
+            options.cgi_paths.split(',')
+        if sys.platform in ('cygwin', 'win32'):
+            cygwin_path = None
+            # For Win32 Python, it is expected that CYGWIN_PATH
+            # is set to a directory of cygwin binaries.
+            # For example, websocket_server.py in Chromium sets CYGWIN_PATH to
+            # full path of third_party/cygwin/bin.
+            if 'CYGWIN_PATH' in os.environ:
+                cygwin_path = os.environ['CYGWIN_PATH']
+            util.wrap_popen3_for_win(cygwin_path)
+            def __check_script(scriptpath):
+                return util.get_script_interp(scriptpath, cygwin_path)
+            CGIHTTPServer.executable = __check_script
 
     if options.use_tls:
         if not _HAS_OPEN_SSL:
@@ -337,12 +450,16 @@ def _main():
         # instantiation.  Dispatcher can be shared because it is thread-safe.
         options.dispatcher = dispatch.Dispatcher(options.websock_handlers,
                                                  options.scan_dir)
+        if options.websock_handlers_map_file:
+            _alias_handlers(options.dispatcher,
+                            options.websock_handlers_map_file)
         _print_warnings_if_any(options.dispatcher)
 
         WebSocketRequestHandler.options = options
         WebSocketServer.options = options
 
-        server = WebSocketServer(('', options.port), WebSocketRequestHandler)
+        server = WebSocketServer((options.server_host, options.port),
+                                 WebSocketRequestHandler)
         server.serve_forever()
     except Exception, e:
         logging.critical(str(e))

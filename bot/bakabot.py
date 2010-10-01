@@ -40,7 +40,7 @@ else:
     print "Bokka couldn't find its brain - bakabot.brn"
     print "Please run makemeabrain.py"
 
-log.info ("Bokka is ready to talk the talk...")
+log.info ("Baka is ready to talk the talk...")
 
 while True:
     data,addr = UDPSock.recvfrom(buf)
@@ -54,7 +54,7 @@ while True:
         response = "%s|%s:%s" % (
                             time.time(),
                             'baka',
-                            ' @%s %s' % (nick, k.respond(msg.split('@baka',1)[1]))
+                            ' @%s %s' % (nick, k.respond(msg.split('@baka',1)[1], nick))
                             )
         #time.sleep(1)       # lets be a little human
         r.push ('msgs',response,head=True)

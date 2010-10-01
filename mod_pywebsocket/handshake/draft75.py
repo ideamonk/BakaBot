@@ -1,4 +1,4 @@
-# Copyright 2009, Google Inc.
+# Copyright 2010, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -28,7 +28,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-"""Web Socket handshaking.
+"""Web Socket handshaking defined in draft-hixie-thewebsocketprotocol-75.
 
 Note: request.connection.write/read are used in this module, even though
 mod_python document says that they should be used only in connection handlers.
@@ -39,13 +39,10 @@ not suitable because they don't allow direct raw bytes writing/reading.
 
 import re
 
-import util
+from mod_pywebsocket.handshake._base import HandshakeError
+from mod_pywebsocket.handshake._base import build_location
+from mod_pywebsocket.handshake._base import validate_protocol
 
-
-_DEFAULT_WEB_SOCKET_PORT = 80
-_DEFAULT_WEB_SOCKET_SECURE_PORT = 443
-_WEB_SOCKET_SCHEME = 'ws'
-_WEB_SOCKET_SECURE_SCHEME = 'wss'
 
 _MANDATORY_HEADERS = [
     # key, expected value or None
@@ -56,7 +53,7 @@ _MANDATORY_HEADERS = [
 ]
 
 _FIRST_FIVE_LINES = map(re.compile, [
-    r'^GET [\S]+ HTTP/1.1\r\n$',
+    r'^GET /[\S]* HTTP/1.1\r\n$',
     r'^Upgrade: WebSocket\r\n$',
     r'^Connection: Upgrade\r\n$',
     r'^Host: [\S]+\r\n$',
@@ -66,32 +63,10 @@ _FIRST_FIVE_LINES = map(re.compile, [
 _SIXTH_AND_LATER = re.compile(
     r'^'
     r'(WebSocket-Protocol: [\x20-\x7e]+\r\n)?'
-    r'([Cc][Oo][Oo][Kk][Ii][Ee]2?:[^\r]*(\r\n[ \t][^\r]*)*\r\n)?'
+    r'(Cookie: [^\r]*\r\n)*'
+    r'(Cookie2: [^\r]*\r\n)?'
+    r'(Cookie: [^\r]*\r\n)*'
     r'\r\n')
-
-
-
-def _default_port(is_secure):
-    if is_secure:
-        return _DEFAULT_WEB_SOCKET_SECURE_PORT
-    else:
-        return _DEFAULT_WEB_SOCKET_PORT
-
-
-class HandshakeError(Exception):
-    """Exception in Web Socket Handshake."""
-
-    pass
-
-
-def _validate_protocol(protocol):
-    """Validate WebSocket-Protocol string."""
-
-    if not protocol:
-        raise HandshakeError('Invalid WebSocket-Protocol: empty')
-    for c in protocol:
-        if not 0x20 <= ord(c) <= 0x7e:
-            raise HandshakeError('Illegal character in protocol: %r' % c)
 
 
 class Handshaker(object):
@@ -133,37 +108,12 @@ class Handshaker(object):
         self._request.ws_origin = self._request.headers_in['Origin']
 
     def _set_location(self):
-        location_parts = []
-        if self._request.is_https():
-            location_parts.append(_WEB_SOCKET_SECURE_SCHEME)
-        else:
-            location_parts.append(_WEB_SOCKET_SCHEME)
-        location_parts.append('://')
-        host, port = self._parse_host_header()
-        connection_port = self._request.connection.local_addr[1]
-        if port != connection_port:
-            raise HandshakeError('Header/connection port mismatch: %d/%d' %
-                                 (port, connection_port))
-        location_parts.append(host)
-        if (port != _default_port(self._request.is_https())):
-            location_parts.append(':')
-            location_parts.append(str(port))
-        location_parts.append(self._request.uri)
-        self._request.ws_location = ''.join(location_parts)
-
-    def _parse_host_header(self):
-        fields = self._request.headers_in['Host'].split(':', 1)
-        if len(fields) == 1:
-            return fields[0], _default_port(self._request.is_https())
-        try:
-            return fields[0], int(fields[1])
-        except ValueError, e:
-            raise HandshakeError('Invalid port number format: %r' % e)
+        self._request.ws_location = build_location(self._request)
 
     def _set_protocol(self):
         protocol = self._request.headers_in.get('WebSocket-Protocol')
         if protocol is not None:
-            _validate_protocol(protocol)
+            validate_protocol(protocol)
         self._request.ws_protocol = protocol
 
     def _send_handshake(self):
@@ -196,10 +146,9 @@ class Handshaker(object):
             try:
                 lines = self._request.connection.get_memorized_lines()
             except AttributeError, e:
-                util.prepend_message_to_exception(
+                raise AttributeError(
                     'Strict handshake is specified but the connection '
-                    'doesn\'t provide get_memorized_lines()', e)
-                raise
+                    'doesn\'t provide get_memorized_lines()')
             self._check_first_lines(lines)
 
     def _check_first_lines(self, lines):

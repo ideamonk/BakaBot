@@ -9,15 +9,18 @@ Sun Dec 27 12:10:13 IST 2009             Abhishek Mishra <ideamonk at gmail.com>
 
 
 
+ A fun websocket experiment with pywebsockets.
 
+ Getting it up -
+ 
+  1. Get redis, build, install, etc. 
+     http://code.google.com/p/redis/
+  2. Get pywebsocket, do a setup.py install
+     http://code.google.com/p/pywebsocket/
+  3. Buid Baka's brain -
+     $ cd bot
+     $ python makemybrain.py
+     This would create a bakabot.brn file inside ./bot/
+  4. Run ./start_serving to make it happen
+  5. Open ./interface/index.html to operate
 
-
-
-
-
-DB -
-    msgs <- list of strings... never flushed... no worries about space
-    
-    format -
-        '%s|nickname:message' % time.time()
-        if message has @ideabot
